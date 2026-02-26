@@ -207,9 +207,13 @@ _wt_sync_files() {
   )
 
   # Pass 1 — untracked non-ignored files
+  # Filter excluded dirs from the file list: rsync --exclude doesn't reliably
+  # skip explicitly listed paths when using --files-from.
   local tmpfile
   tmpfile="$(mktemp)"
-  git -C "$src" ls-files --others --exclude-standard > "$tmpfile"
+  git -C "$src" ls-files --others --exclude-standard \
+    | grep -Ev '^(node_modules|\.git|\.next|dist|out|build|\.turbo|coverage|\.nyc_output)/' \
+    > "$tmpfile" || true
   if [[ -s "$tmpfile" ]]; then
     echo "wt sync: copying untracked files..." >&2
     rsync -a "${excludes[@]}" --files-from="$tmpfile" "$src/" "$dst/"

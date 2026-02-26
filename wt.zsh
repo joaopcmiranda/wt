@@ -13,8 +13,11 @@ _wt_assert_git_repo() {
   fi
 }
 
+# Canonical (symlink-resolved) absolute path to the repo root.
+# On macOS /var/folders is a symlink to /private/var/folders; git rev-parse
+# returns the resolved form, so we normalise here to avoid comparison mismatches.
 _wt_repo_root() {
-  git rev-parse --show-toplevel
+  (cd "$(git rev-parse --show-toplevel)" && pwd -P)
 }
 
 _wt_worktrees_root() {
@@ -77,11 +80,16 @@ _wt_detect_editor() {
   fi
 }
 
-# Returns 0 if working tree has uncommitted changes
+# Returns 0 if working tree has uncommitted changes, 1 if clean.
+# Uses `command git` to bypass any zsh function or alias shadowing git.
+# Note: deliberately avoids `local path` — in zsh, `path` is tied to $PATH.
 _wt_is_dirty() {
-  local path="${1:-.}"
-  ! git -C "$path" diff --quiet 2>/dev/null || \
-  ! git -C "$path" diff --cached --quiet 2>/dev/null
+  local _dirty_target="${1:-.}"
+  if command git -C "$_dirty_target" diff --quiet 2>/dev/null &&
+     command git -C "$_dirty_target" diff --cached --quiet 2>/dev/null; then
+    return 1  # clean
+  fi
+  return 0  # dirty
 }
 
 # Given a branch name, return its worktree path (empty if not found)
@@ -243,20 +251,20 @@ _wt_sync_files() {
 
 # Open a worktree path in detected editor
 _wt_open_in_editor() {
-  local path="$1"
+  local _editor_target="$1"
   local editor
   editor="$(_wt_detect_editor)"
   if [[ -z "$editor" ]]; then
     echo "wt: no supported editor found (webstorm, idea, cursor, code)" >&2
     return 1
   fi
-  "$editor" "$path"
+  "$editor" "$_editor_target"
 }
 
 # Open a new Terminal.app window/tab at path
 _wt_open_terminal() {
-  local path="$1"
-  local escaped="${path//\'/\'\\\'\'}"
+  local _term_target="$1"
+  local escaped="${_term_target//\'/\'\\\'\'}"
   osascript <<APPLESCRIPT 2>/dev/null
 tell application "Terminal"
     activate
@@ -266,7 +274,7 @@ APPLESCRIPT
   if [[ $? -ne 0 ]]; then
     echo "wt: failed to open Terminal.app (check Automation permissions)" >&2
     echo "     System Settings → Privacy & Security → Automation" >&2
-    echo "     path: $path" >&2
+    echo "     path: $_term_target" >&2
   fi
 }
 

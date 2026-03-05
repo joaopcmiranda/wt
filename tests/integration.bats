@@ -420,3 +420,53 @@ load helpers
   [ "$status" -eq 0 ]
   [ -f "$dst/apps/api/.env" ]
 }
+
+@test "sync_files: excludes target directory (rust build artifacts)" {
+  local base="$BATS_TEST_TMPDIR/sync-target"
+  setup_repo "$base/src"
+  local dst="$base/dst"
+  mkdir -p "$dst"
+
+  # Simulate a Rust target directory with an untracked binary
+  mkdir -p "$base/src/target/debug"
+  echo "binary" > "$base/src/target/debug/myapp"
+
+  run zsh -c "source '$WT_ZSH' && _wt_sync_files '$base/src' '$dst'"
+  [ "$status" -eq 0 ]
+  [ ! -d "$dst/target" ]
+}
+
+# ---------------------------------------------------------------------------
+# wt new — rust project
+# ---------------------------------------------------------------------------
+
+@test "wt new: creates worktree for rust project without running package manager" {
+  local base="$BATS_TEST_TMPDIR/repos-rust"
+  setup_repo "$base/main"
+
+  # Simulate a Rust project (Cargo.toml, no package.json)
+  printf '[package]\nname = "myapp"\nversion = "0.1.0"\nedition = "2021"\n' \
+    > "$base/main/Cargo.toml"
+  git -C "$base/main" add Cargo.toml
+  git -C "$base/main" commit -q -m "add Cargo.toml"
+
+  # wt new must succeed without running pnpm/yarn/npm install
+  run zsh -c "source '$WT_ZSH' && cd '$base/main' && _wt_cmd_new rust-feature --here --no-deps"
+  [ "$status" -eq 0 ]
+  [ -d "$base/rust-feature" ]
+}
+
+@test "wt new: rust project without --no-deps prints rust detected message and succeeds" {
+  local base="$BATS_TEST_TMPDIR/repos-rust-nodeps"
+  setup_repo "$base/main"
+
+  printf '[package]\nname = "myapp"\nversion = "0.1.0"\nedition = "2021"\n' \
+    > "$base/main/Cargo.toml"
+  git -C "$base/main" add Cargo.toml
+  git -C "$base/main" commit -q -m "add Cargo.toml"
+
+  run zsh -c "source '$WT_ZSH' && cd '$base/main' && _wt_cmd_new rust-nodeps --here"
+  [ "$status" -eq 0 ]
+  [ -d "$base/rust-nodeps" ]
+  [[ "$output" =~ "rust project detected" ]]
+}

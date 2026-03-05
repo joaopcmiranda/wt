@@ -65,6 +65,18 @@ _wt_detect_pm() {
   fi
 }
 
+# Detect project type: "node" | "rust" | "unknown"
+_wt_detect_project_type() {
+  local root="$1"
+  if [[ -f "$root/Cargo.toml" ]]; then
+    echo "rust"
+  elif [[ -f "$root/package.json" ]]; then
+    echo "node"
+  else
+    echo "unknown"
+  fi
+}
+
 # Detect editor: webstorm > idea > cursor > code
 _wt_detect_editor() {
   if command -v webstorm &>/dev/null; then
@@ -202,6 +214,7 @@ _wt_sync_files() {
     --exclude='.turbo/'
     --exclude='coverage/'
     --exclude='.nyc_output/'
+    --exclude='target/'
     --exclude='*.tsbuildinfo'
     --exclude='.idea/workspace.xml'
   )
@@ -212,7 +225,7 @@ _wt_sync_files() {
   local tmpfile
   tmpfile="$(mktemp)"
   git -C "$src" ls-files --others --exclude-standard \
-    | grep -Ev '^(node_modules|\.git|\.next|dist|out|build|\.turbo|coverage|\.nyc_output)/' \
+    | grep -Ev '^(node_modules|\.git|\.next|dist|out|build|\.turbo|coverage|\.nyc_output|target)/' \
     > "$tmpfile" || true
   if [[ -s "$tmpfile" ]]; then
     echo "wt sync: copying untracked files..." >&2
@@ -245,6 +258,7 @@ _wt_sync_files() {
     -not -path "*/.git/*" \
     -not -path "*/.next/*" \
     -not -path "*/dist/*" \
+    -not -path "*/target/*" \
     \( "${env_patterns[@]}" \) \
     -type f 2>/dev/null)
 
@@ -364,10 +378,16 @@ _wt_cmd_new() {
 
   # Detect and run package manager install
   if ! $no_deps; then
-    local pm
-    pm="$(_wt_detect_pm "$current_root")"
-    echo "wt: running $pm install..."
-    (cd "$worktree_path" && "$pm" install)
+    local project_type
+    project_type="$(_wt_detect_project_type "$current_root")"
+    if [[ "$project_type" == "node" ]]; then
+      local pm
+      pm="$(_wt_detect_pm "$current_root")"
+      echo "wt: running $pm install..."
+      (cd "$worktree_path" && "$pm" install)
+    elif [[ "$project_type" == "rust" ]]; then
+      echo "wt: rust project detected — skipping install (cargo fetches deps on build)"
+    fi
   fi
 
   # Remove ERR trap
@@ -688,7 +708,7 @@ Commands:
   wt new <branch> [flags]   Create a new worktree
     --from <ref>              Source ref (default: origin/HEAD default branch)
     --here                    Branch from current HEAD instead
-    --no-deps                 Skip package manager install
+    --no-deps                 Skip dependency install (node: package manager; rust: no-op)
     --open                    Open in editor after creation
     --sh                      Open a new Terminal.app window at the worktree path
     --dir <name>              Override sanitized directory name

@@ -118,3 +118,46 @@ load helpers
   [ "$status" -eq 0 ]
   [ "$output" = "pnpm" ]
 }
+
+# ---------------------------------------------------------------------------
+# _wt_detect_project_type
+# ---------------------------------------------------------------------------
+
+@test "detect_project_type: detects rust from Cargo.toml" {
+  local dir="$BATS_TEST_TMPDIR/proj-rust"
+  mkdir -p "$dir"
+  touch "$dir/Cargo.toml"
+
+  run zsh -c "source '$WT_ZSH' && _wt_detect_project_type '$dir'"
+  [ "$status" -eq 0 ]
+  [ "$output" = "rust" ]
+}
+
+@test "detect_project_type: detects node from package.json" {
+  local dir="$BATS_TEST_TMPDIR/proj-node"
+  mkdir -p "$dir"
+  touch "$dir/package.json"
+
+  run zsh -c "source '$WT_ZSH' && _wt_detect_project_type '$dir'"
+  [ "$status" -eq 0 ]
+  [ "$output" = "node" ]
+}
+
+@test "detect_project_type: returns unknown when neither Cargo.toml nor package.json present" {
+  local dir="$BATS_TEST_TMPDIR/proj-unknown"
+  mkdir -p "$dir"
+
+  run zsh -c "source '$WT_ZSH' && _wt_detect_project_type '$dir'"
+  [ "$status" -eq 0 ]
+  [ "$output" = "unknown" ]
+}
+
+@test "detect_project_type: rust takes precedence when both Cargo.toml and package.json present" {
+  local dir="$BATS_TEST_TMPDIR/proj-rust-node"
+  mkdir -p "$dir"
+  touch "$dir/Cargo.toml" "$dir/package.json"
+
+  run zsh -c "source '$WT_ZSH' && _wt_detect_project_type '$dir'"
+  [ "$status" -eq 0 ]
+  [ "$output" = "rust" ]
+}

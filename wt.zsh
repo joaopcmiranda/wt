@@ -376,7 +376,8 @@ _wt_cmd_new() {
   echo "wt: syncing files..."
   _wt_sync_files "$current_root" "$worktree_path"
 
-  # Detect and run package manager install
+  # Detect project type and install dependencies accordingly:
+  # node → run the detected package manager; rust → skip (cargo fetches on build); unknown → skip
   if ! $no_deps; then
     local project_type
     project_type="$(_wt_detect_project_type "$current_root")"
